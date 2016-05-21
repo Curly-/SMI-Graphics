@@ -15,9 +15,15 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     bool maximised = style & SME_WINDOW_MAXIMISED;
     bool minimised = style & SME_WINDOW_MINIMISED;
 
+#if defined _WIN32
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    
     DWORD winstyle = 0;
     if (borderlessfs) {
         winstyle = WS_OVERLAPPED | WS_POPUP;
+        width = screenWidth;
+        height = screenHeight;
     } else {
         winstyle = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME
                 | (resizable ? WS_THICKFRAME : 0)
@@ -43,9 +49,6 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
 
     RegisterClassEx(&wndClass);
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    
     hwnd = CreateWindowEx(0,
             "SME",
             title.c_str(),
@@ -64,4 +67,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     SetFocus(hwnd);
         
     return hwnd != 0;
+#elif defined __linux__
+    
+#endif
 }
