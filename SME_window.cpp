@@ -5,8 +5,6 @@
 
 #if defined _WIN32
 
-//TODO WindowsScancodesTable[] = {SME_SCANCODE_UNKNOWN, SME_SCANCODE_1, SME_SCANCODE_2, etc}
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     SME::Events::Event event;
     switch (uMsg) {
@@ -18,14 +16,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_KEYDOWN:
             event.type = SME::Events::SME_KEYBOARD;
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYDOWN;
-            event.keyboardEvent.repeated = (lParam & 0xFFFF);                                       //bits 0-15:  repeat count
-            event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];     //bits 16-23: scan code
+            event.keyboardEvent.repeated = lParam & (1<<30); //repeat count always returns 1, so use bit 30 instead
+            event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF]; //bits 16-23: scan code
             SME::Events::createEvent(event);
             break;
         case WM_KEYUP:
             event.type = SME::Events::SME_KEYBOARD;
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYUP;
-            event.keyboardEvent.repeated = (lParam & 0xFFFF) > 0;
+            event.keyboardEvent.repeated = 0; //can't be anything else
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];
             SME::Events::createEvent(event);
             break;
