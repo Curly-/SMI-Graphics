@@ -28,6 +28,10 @@ namespace SME { namespace Window {
 
 #endif
     bool create(int width, int height, std::string title, int style);
+    
+#if defined _WIN32
+    void msgCheck();
+#endif
 }}
 
 #endif	/* SME_WINDOW_H */

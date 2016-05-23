@@ -1,9 +1,44 @@
 #include "SME_window.h"
 #include <iostream>
+#include <SME_events.h>
+#include <SME_core.h>
 
 #if defined _WIN32
+
+//TODO WindowsScancodesTable[] = {SME_SCANCODE_UNKNOWN, SME_SCANCODE_1, SME_SCANCODE_2, etc}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    SME::Events::Event event;
+    switch (uMsg) {
+        case WM_CLOSE:
+            event.type = SME::Events::SME_WINDOW;
+            event.windowEvent.event = SME::Events::SME_WINDOW_CLOSE;
+            SME::Events::createEvent(event);
+            break;
+        case WM_KEYDOWN:
+            event.type = SME::Events::SME_KEYBOARD;
+            event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYDOWN;
+            event.keyboardEvent.repeated = (lParam & 0xFFFF);                                       //bits 0-15:  repeat count
+            event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];     //bits 16-23: scan code
+            SME::Events::createEvent(event);
+            break;
+        case WM_KEYUP:
+            event.type = SME::Events::SME_KEYBOARD;
+            event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYUP;
+            event.keyboardEvent.repeated = (lParam & 0xFFFF) > 0;
+            event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];
+            SME::Events::createEvent(event);
+            break;
+    }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+void SME::Window::msgCheck() {
+    MSG msg;
+    while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
 }
 #elif define __linux__
 
@@ -18,7 +53,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
 #if defined _WIN32
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    
+
     DWORD winstyle = 0;
     if (borderlessfs) {
         winstyle = WS_OVERLAPPED | WS_POPUP;
@@ -32,9 +67,9 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     }
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
-    
+
     WNDCLASSEX wndClass;
-    wndClass.cbSize = sizeof(WNDCLASSEX);
+    wndClass.cbSize = sizeof (WNDCLASSEX);
     wndClass.style = CS_HREDRAW | CS_VREDRAW;
     wndClass.lpfnWndProc = WndProc;
     wndClass.cbClsExtra = 0;
@@ -61,13 +96,15 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
             NULL,
             hInstance,
             NULL);
-    
+
     ShowWindow(hwnd, SW_SHOW);
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
-        
-    return hwnd != 0;
-#elif defined __linux__
     
+    SME::Core::addLoopUpdateHook(msgCheck);
+
+    return hwnd != 0; //TODO work on this. this is either going to be true, or crash before
+#elif defined __linux__
+
 #endif
 }
