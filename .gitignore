@@ -3,3 +3,4 @@ dist/
 nbproject/
 .dep.inc
 lib/
+Makefile
