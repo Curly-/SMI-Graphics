@@ -1,1 +1,1 @@
-# SMI-Graphics 
+# SME-UI
