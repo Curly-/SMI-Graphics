@@ -24,17 +24,24 @@ void createClickEvent(int button, SME::Events::EventType type) {
 }
 
 //TODO keycodes
-//TODO isPressed(key)
+//TODO isPressed(key) (SME::Keyboard::KeyStates)
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     SME::Events::Event event;
     switch (uMsg) {
+        /*
+         * Alt+F4, close button, etc
+         */
         case WM_CLOSE:
             event.type = SME::Events::SME_WINDOW;
             event.windowEvent.event = SME::Events::SME_WINDOW_CLOSE;
             SME::Events::createEvent(event);
-            break;
+            return 0; //Return 0 to avoid default implementation (Window closing)
+        /*
+         * Called when the window is resized, maximised, minimised
+         */
         case WM_SIZE:
+            std::cout << "size" << std::endl;
             newWidth = LOWORD(lParam);
             newHeight = HIWORD(lParam);
             if (wParam == SIZE_MINIMIZED) {
@@ -47,13 +54,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
                 SME::Events::createEvent(event);
             }
             break;
-        case WM_EXITSIZEMOVE: //called when done resizing
+        /*
+         * Called when done resizing/moving
+         * Used to avoid event spam when the window is resized
+         */
+        case WM_EXITSIZEMOVE:
             event.type = SME::Events::SME_WINDOW;
             event.windowEvent.event = SME::Events::SME_WINDOW_RESIZE;
             event.windowEvent.width = newWidth;
             event.windowEvent.height = newHeight;
             SME::Events::createEvent(event);
             break;
+        /*
+         * Called when a key is pressed
+         */
         case WM_KEYDOWN:
             event.type = SME::Events::SME_KEYBOARD;
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYDOWN;
@@ -61,6 +75,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF]; //bits 16-23: scan code
             SME::Events::createEvent(event);
             break;
+        /*
+         * Called when a key is released
+         */
         case WM_KEYUP:
             event.type = SME::Events::SME_KEYBOARD;
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYUP;
@@ -68,6 +85,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];
             SME::Events::createEvent(event);
             break;
+        /*
+         * Called when the mouse (maybe cursor in general) is moved in the window
+         */
         case WM_MOUSEMOVE:
             event.type = SME::Events::SME_MOUSE;
             event.mouseEvent.event = SME::Events::SME_MOUSE_MOVE;
@@ -77,15 +97,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             mouseY = event.mouseEvent.y = GET_Y_LPARAM(lParam);
             SME::Events::createEvent(event);
             break;
+        /*
+         * Called when the left mouse button is pressed (button 1)
+         */
         case WM_LBUTTONDOWN:
             createClickEvent(1, SME::Events::SME_MOUSE_MOUSEDOWN);
             break;
+        /*
+         * Called when the right mouse button is pressed (button 2)
+         */
         case WM_RBUTTONDOWN:
             createClickEvent(2, SME::Events::SME_MOUSE_MOUSEDOWN);
             break;
+        /*
+         * Called when the middle mouse button is pressed (button 3)
+         */
         case WM_MBUTTONDOWN:
             createClickEvent(3, SME::Events::SME_MOUSE_MOUSEDOWN);
             break;
+        /*
+         * Called when any other mouse button is pressed (button >3)
+         */
         case WM_XBUTTONDOWN:
             createClickEvent(GET_XBUTTON_WPARAM(wParam)+3, SME::Events::SME_MOUSE_MOUSEDOWN);
             break;
@@ -101,6 +133,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_XBUTTONUP:
             createClickEvent(GET_XBUTTON_WPARAM(wParam)+3, SME::Events::SME_MOUSE_MOUSEUP);
             break;
+        /*
+         * Called when the mouse wheel is scrolled
+         */
         case WM_MOUSEWHEEL:
             event.type = SME::Events::SME_MOUSE;
             event.mouseEvent.event = SME::Events::SME_MOUSE_WHEEL;
@@ -109,7 +144,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.mouseEvent.y = mouseY;
             SME::Events::createEvent(event);
     }
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+    return DefWindowProc(hWnd, uMsg, wParam, lParam); //Forward the event to windows to call the default implementation
 }
 
 void SME::Window::msgCheck() {
@@ -176,7 +211,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
             hInstance,
             NULL);
 
-    ShowWindow(hwnd, SW_SHOW);
+    ShowWindow(hwnd, SW_SHOW); //Make the window visible
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
 
@@ -185,5 +220,14 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     return hwnd != 0; //TODO work on this. this is either going to be true, or crash before
 #elif defined __linux__
 
+#endif
+    SME::Core::addCleanupHook(cleanup);
+}
+
+void SME::Window::cleanup() {
+#if defined _WIN32
+    DestroyWindow(hwnd);
+#elif defined __linux__
+    
 #endif
 }

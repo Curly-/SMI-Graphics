@@ -27,9 +27,20 @@ namespace SME { namespace Window {
 #elif defined __linux__
 
 #endif
+    /*
+     * Creates and shows the window
+     */
     bool create(int width, int height, std::string title, int style);
+    /*
+     * Destroys the window
+     * Called automatically, however, can be called manually
+     */
+    void cleanup();
     
 #if defined _WIN32
+    /*
+     * Called when the window receives an event
+     */
     void msgCheck();
 #endif
 }}
