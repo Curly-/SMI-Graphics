@@ -1,11 +1,14 @@
 #include "SME_window.h"
-#include <iostream>
 #include <SME_events.h>
 #include <SME_core.h>
+#include <SME_keyboard.h>
+#include <iostream>
 
 #if defined _WIN32
 
 #include <Windowsx.h>
+
+HWND SME::Window::hwnd;
 
 int newWidth = 0; //to avoid resize spam
 int newHeight = 0;
@@ -74,6 +77,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.repeated = lParam & (1 << 30); //repeat count always returns 1, so use bit 30 instead
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF]; //bits 16-23: scan code
             SME::Events::createEvent(event);
+            
+            SME::Keyboard::KeyStates[event.keyboardEvent.scancode] = true;
             break;
         /*
          * Called when a key is released
@@ -84,6 +89,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.repeated = 0; //can't be anything else
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];
             SME::Events::createEvent(event);
+            
+            SME::Keyboard::KeyStates[event.keyboardEvent.scancode] = false;
             break;
         /*
          * Called when the mouse (maybe cursor in general) is moved in the window
@@ -139,7 +146,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         case WM_MOUSEWHEEL:
             event.type = SME::Events::SME_MOUSE;
             event.mouseEvent.event = SME::Events::SME_MOUSE_WHEEL;
-            event.mouseEvent.scroll = ((int16_t)HIWORD(wParam))/WHEEL_DELTA; //positive = forward, negative = backward
+            event.mouseEvent.scroll = ((int16_t)HIWORD(wParam))/WHEEL_DELTA;
             event.mouseEvent.x = mouseX;
             event.mouseEvent.y = mouseY;
             SME::Events::createEvent(event);

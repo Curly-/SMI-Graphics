@@ -23,7 +23,7 @@
 
 namespace SME { namespace Window {
 #if defined _WIN32
-    HWND hwnd;
+    extern HWND hwnd;
 #elif defined __linux__
 
 #endif
