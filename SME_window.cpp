@@ -76,6 +76,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYDOWN;
             event.keyboardEvent.repeated = lParam & (1 << 30); //repeat count always returns 1, so use bit 30 instead
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF]; //bits 16-23: scan code
+            event.keyboardEvent.keycode = SME::Keyboard::OSKeycodeTable[wParam];
             SME::Events::createEvent(event);
             
             SME::Keyboard::KeyStates[event.keyboardEvent.scancode] = true;
@@ -88,6 +89,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             event.keyboardEvent.event = SME::Events::SME_KEYBOARD_KEYUP;
             event.keyboardEvent.repeated = 0; //can't be anything else
             event.keyboardEvent.scancode = SME::Keyboard::OSScancodeTable[lParam >> 16 & 0xFF];
+            event.keyboardEvent.keycode = SME::Keyboard::OSKeycodeTable[wParam];
             SME::Events::createEvent(event);
             
             SME::Keyboard::KeyStates[event.keyboardEvent.scancode] = false;
