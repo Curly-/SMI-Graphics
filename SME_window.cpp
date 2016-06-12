@@ -26,9 +26,6 @@ void createClickEvent(int button, SME::Events::EventType type) {
     SME::Events::createEvent(event);
 }
 
-//TODO keycodes
-//TODO isPressed(key) (SME::Keyboard::KeyStates)
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     SME::Events::Event event;
     switch (uMsg) {
@@ -44,7 +41,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
          * Called when the window is resized, maximised, minimised
          */
         case WM_SIZE:
-            std::cout << "size" << std::endl;
             newWidth = LOWORD(lParam);
             newHeight = HIWORD(lParam);
             if (wParam == SIZE_MINIMIZED) {
@@ -156,7 +152,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hWnd, uMsg, wParam, lParam); //Forward the event to windows to call the default implementation
 }
 
-void SME::Window::msgCheck() {
+void msgCheck() {
     MSG msg;
     while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -165,6 +161,45 @@ void SME::Window::msgCheck() {
 }
 #elif defined __linux__
 
+#include <xcb/xcb_keysyms.h>
+#include <xcb/randr.h>
+#include <X11/keysym.h>
+#include <string.h> //I blame XCB
+
+xcb_connection_t* SME::Window::connection;
+xcb_window_t SME::Window::window;
+
+xcb_key_symbols_t *symbols;
+
+xcb_intern_atom_reply_t* closeCookie;
+
+void msgCheck() {
+    xcb_generic_event_t *event;
+    SME::Events::Event smeEvent;
+    while (event = xcb_poll_for_event(SME::Window::connection)) {
+        switch(event->response_type & ~0x80){
+            case XCB_CONFIGURE_NOTIFY:
+                printf("test");
+                break;
+            case XCB_CLIENT_MESSAGE:
+                if((*(xcb_client_message_event_t*)event).data.data32[0] == (*closeCookie).atom){
+                    smeEvent.type = SME::Events::SME_WINDOW;
+                    smeEvent.windowEvent.event = SME::Events::SME_WINDOW_CLOSE;
+                    SME::Events::createEvent(smeEvent);
+                }
+                break;
+            case XCB_RESIZE_REQUEST:
+                fprintf(stdout, "resizing");
+                break;
+            case XCB_KEY_PRESS:
+                xcb_key_press_event_t *kp = (xcb_key_press_event_t*)event;
+                fprintf(stdout, "%u", kp->detail);
+                xcb_keysym_t sym = xcb_key_press_lookup_keysym(symbols, kp, 0);
+                fprintf(stdout, "\t%u\n", sym);
+                break;
+        }
+    }
+}
 #endif
 
 bool SME::Window::create(int width, int height, std::string title, int style) {
@@ -172,6 +207,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     bool resizable = style & SME_WINDOW_RESIZABLE;
     bool maximised = style & SME_WINDOW_MAXIMISED;
     bool minimised = style & SME_WINDOW_MINIMISED;
+    int monitorNumber = 0;//first monitor. TODO: config this
 
 #if defined _WIN32
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
@@ -224,12 +260,89 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     SetForegroundWindow(hwnd);
     SetFocus(hwnd);
 
-    SME::Core::addLoopUpdateHook(msgCheck);
-
     return hwnd != 0; //TODO work on this. this is either going to be true, or crash before
 #elif defined __linux__
-
+    //Window creation
+    connection = xcb_connect(NULL, NULL);
+    const xcb_setup_t      *setup  = xcb_get_setup (connection);
+    xcb_screen_iterator_t   iter   = xcb_setup_roots_iterator (setup);
+    xcb_screen_t           *screen = iter.data;
+    xcb_cw_t mask = XCB_CW_EVENT_MASK;
+    xcb_event_mask_t valwin[] = {XCB_EVENT_MASK_KEY_PRESS, XCB_EVENT_MASK_STRUCTURE_NOTIFY};
+    window = xcb_generate_id(connection);
+    xcb_create_window(
+            connection,
+            XCB_COPY_FROM_PARENT,
+            window,
+            screen->root,
+            0,
+            0,
+            width,
+            height,
+            0,
+            XCB_WINDOW_CLASS_INPUT_OUTPUT,
+            screen->root_visual,
+            mask,
+            valwin);  
+    xcb_change_property(connection,
+            XCB_PROP_MODE_REPLACE,
+            window,
+            XCB_ATOM_WM_NAME,
+            XCB_ATOM_STRING,
+            8,
+            strlen(title.c_str()),
+            title.c_str());
+    xcb_map_window (connection, window);
+    xcb_flush (connection);
+    
+    //Window centering code (yeah ik, blame xcb)
+    
+    xcb_randr_get_screen_resources_cookie_t screenResourcesCookie = {};
+    screenResourcesCookie = xcb_randr_get_screen_resources(connection, window);
+    
+    xcb_randr_get_screen_resources_reply_t* screenResourcesReply = {};
+    screenResourcesReply = xcb_randr_get_screen_resources_reply(connection,
+            screenResourcesCookie, nullptr);
+    
+    int crtcsNum = 0;
+    xcb_randr_crtc_t* firstCRTC;
+    
+    if(screenResourcesReply){
+        crtcsNum = xcb_randr_get_screen_resources_crtcs_length(screenResourcesReply);
+        
+        firstCRTC = xcb_randr_get_screen_resources_crtcs(screenResourcesReply);
+        
+        xcb_randr_get_crtc_info_cookie_t crtcResourcesCookie = {};
+        crtcResourcesCookie = xcb_randr_get_crtc_info(connection, *(firstCRTC+monitorNumber), 0);
+        
+        xcb_randr_get_crtc_info_reply_t* crtcResReply = {};
+        crtcResReply = xcb_randr_get_crtc_info_reply(connection, crtcResourcesCookie, 0);
+        
+        const uint32_t values[] = {(uint32_t)(crtcResReply->width / 2 - width / 2),
+                (uint32_t)(crtcResReply->height / 2 - height / 2)};
+        
+        xcb_configure_window(connection, window, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
+    } else {
+        printf("Warning, couldn't get reply from XServer while requesting for screen resources.");
+    }
+    
+    //window closing detection
+    
+    xcb_intern_atom_cookie_t cookie1 = xcb_intern_atom(connection, 1,12, "WM_PROTOCOLS");
+    xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(connection, cookie1, 0);
+    
+    xcb_intern_atom_cookie_t cookie2 = xcb_intern_atom(connection, 0, 16, "WM_DELETE_WINDOW");
+    closeCookie = xcb_intern_atom_reply(connection, cookie2, 0);
+    
+    xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, (*reply).atom, 4, 32, 1, &(*closeCookie).atom);
+    
+    //apply changes        
+    
+    xcb_flush(connection);
+    
+    symbols = xcb_key_symbols_alloc(connection);
 #endif
+    SME::Core::addLoopUpdateHook(msgCheck);
     SME::Core::addCleanupHook(cleanup);
 }
 
@@ -237,6 +350,6 @@ void SME::Window::cleanup() {
 #if defined _WIN32
     DestroyWindow(hwnd);
 #elif defined __linux__
-    
+    xcb_disconnect(connection);
 #endif
 }

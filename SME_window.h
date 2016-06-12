@@ -13,7 +13,7 @@
 #if defined _WIN32
 #include <windows.h>
 #elif defined __linux__
-
+#include <xcb/xcb.h>
 #endif
 
 #define SME_WINDOW_BORDERLESS_FULLSCREEN 1
@@ -25,7 +25,8 @@ namespace SME { namespace Window {
 #if defined _WIN32
     extern HWND hwnd;
 #elif defined __linux__
-
+    extern xcb_connection_t* connection;
+    extern xcb_window_t window;
 #endif
     /*
      * Creates and shows the window
@@ -36,13 +37,6 @@ namespace SME { namespace Window {
      * Called automatically, however, can be called manually
      */
     void cleanup();
-    
-#if defined _WIN32
-    /*
-     * Called when the window receives an event
-     */
-    void msgCheck();
-#endif
 }}
 
 #endif	/* SME_WINDOW_H */
