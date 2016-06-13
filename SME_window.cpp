@@ -166,7 +166,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 
 void msgCheck() {
     MSG msg;
-    while (PeekMessage(&msg, hwnd, 0, 0, PM_REMOVE)) {
+    while (PeekMessage(&msg, SME::Window::hwnd, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
@@ -286,11 +286,20 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
             hInstance,
             NULL);
 
-    ShowWindow(hwnd, SW_SHOW); //Make the window visible
-    SetForegroundWindow(hwnd);
-    SetFocus(hwnd);
-
-    return hwnd != 0; //TODO work on this. this is either going to be true, or crash before
+    RECT cRect; //Resize to account for border
+    RECT wRect;
+    GetClientRect(hwnd, &cRect); //Get drawable size
+    GetWindowRect(hwnd, &wRect); //Get overall window size
+    
+    int newWidth = width + ((wRect.right-wRect.left)-(cRect.right-cRect.left));
+    int newHeight = height + ((wRect.bottom-wRect.top)-(cRect.bottom-cRect.top));
+    
+    SetWindowPos(hwnd, HWND_TOP, //Set the window to on top
+            screenWidth / 2 - newWidth / 2,
+            screenHeight / 2 - newHeight / 2,
+            newWidth,
+            newHeight,
+            SWP_SHOWWINDOW); //make the window visible
 #elif defined __linux__
     //Window creation
     connection = xcb_connect(NULL, NULL);
