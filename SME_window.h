@@ -24,6 +24,7 @@
 namespace SME { namespace Window {
 #if defined _WIN32
     extern HWND hwnd;
+    extern HINSTANCE hInstance;
 #elif defined __linux__
     extern xcb_connection_t* connection;
     extern xcb_window_t window;
@@ -32,11 +33,24 @@ namespace SME { namespace Window {
      * Creates and shows the window
      */
     bool create(int width, int height, std::string title, int style);
+    
     /*
      * Destroys the window
      * Called automatically, however, can be called manually
      */
     void cleanup();
+    
+    /**
+     * Method to get the current width of the window
+     * @return the width in pixels of the window
+     */
+    int getWidth();
+    
+    /**
+     * Method to get the current height of the window
+     * @return the height in pixels of the window
+     */
+    int getHeight();
 }}
 
 #endif	/* SME_WINDOW_H */

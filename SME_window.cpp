@@ -4,14 +4,26 @@
 #include <SME_keyboard.h>
 #include <iostream>
 
+int windowWidth;
+int windowHeight;
+
+int newWidth = 0; //to avoid resize spam
+int newHeight = 0;
+
+int SME::Window::getWidth(){
+    return windowWidth;
+}
+    
+int SME::Window::getHeight(){
+    return windowHeight;
+}
+
 #if defined _WIN32
 
 #include <Windowsx.h>
 
 HWND SME::Window::hwnd;
-
-int newWidth = 0; //to avoid resize spam
-int newHeight = 0;
+HINSTANCE SME::Window::hInstance;
 
 int mouseX; //for delta
 int mouseY;
@@ -163,8 +175,8 @@ void msgCheck() {
 
 #include <xcb/xcb_keysyms.h>
 #include <xcb/randr.h>
-#include <X11/keysym.h>
-#include <string.h> //I blame XCB
+#include <X11/keysym.h> //I blame XCB
+#include <string.h>  //I also blame netbeans for messing up my passive aggresive comments
 
 xcb_connection_t* SME::Window::connection;
 xcb_window_t SME::Window::window;
@@ -173,14 +185,22 @@ xcb_key_symbols_t *symbols;
 
 xcb_intern_atom_reply_t* closeCookie;
 
+int resizeCheck = 0; //count from last resize update tick to prevent event spamming
+
 void msgCheck() {
     xcb_generic_event_t *event;
     SME::Events::Event smeEvent;
+    resizeCheck++;
     while (event = xcb_poll_for_event(SME::Window::connection)) {
         switch(event->response_type & ~0x80){
             case XCB_CONFIGURE_NOTIFY:
-                printf("test");
+            {
+                xcb_configure_notify_event_t *cne = (xcb_configure_notify_event_t *)event;
+                resizeCheck = 1;
+                newWidth = cne->width;
+                newHeight = cne->height;
                 break;
+            }
             case XCB_CLIENT_MESSAGE:
                 if((*(xcb_client_message_event_t*)event).data.data32[0] == (*closeCookie).atom){
                     smeEvent.type = SME::Events::SME_WINDOW;
@@ -188,15 +208,25 @@ void msgCheck() {
                     SME::Events::createEvent(smeEvent);
                 }
                 break;
-            case XCB_RESIZE_REQUEST:
-                fprintf(stdout, "resizing");
-                break;
             case XCB_KEY_PRESS:
                 xcb_key_press_event_t *kp = (xcb_key_press_event_t*)event;
                 fprintf(stdout, "%u", kp->detail);
                 xcb_keysym_t sym = xcb_key_press_lookup_keysym(symbols, kp, 0);
                 fprintf(stdout, "\t%u\n", sym);
                 break;
+        }
+    }
+    if(resizeCheck == 4){
+        resizeCheck = 0;
+        if(windowWidth != newWidth || windowHeight != newHeight){
+            smeEvent.type = SME::Events::SME_WINDOW;
+            smeEvent.windowEvent.event = SME::Events::SME_WINDOW_RESIZE;
+            smeEvent.windowEvent.width = newWidth;
+            smeEvent.windowEvent.height = newHeight;
+            SME::Events::createEvent(smeEvent);
+
+            windowWidth = newWidth;
+            windowHeight = newHeight;
         }
     }
 }
@@ -224,8 +254,8 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
                 | (maximised ? WS_MAXIMIZE : 0)
                 | (minimised ? WS_MINIMIZE : 0);
     }
-
-    HINSTANCE hInstance = GetModuleHandle(NULL);
+    
+    hInstance = GetModuleHandle(NULL);
 
     WNDCLASSEX wndClass;
     wndClass.cbSize = sizeof (WNDCLASSEX);
@@ -268,7 +298,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     xcb_screen_iterator_t   iter   = xcb_setup_roots_iterator (setup);
     xcb_screen_t           *screen = iter.data;
     xcb_cw_t mask = XCB_CW_EVENT_MASK;
-    xcb_event_mask_t valwin[] = {XCB_EVENT_MASK_KEY_PRESS, XCB_EVENT_MASK_STRUCTURE_NOTIFY};
+    uint32_t values[] = {XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_STRUCTURE_NOTIFY};
     window = xcb_generate_id(connection);
     xcb_create_window(
             connection,
@@ -283,7 +313,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
             XCB_WINDOW_CLASS_INPUT_OUTPUT,
             screen->root_visual,
             mask,
-            valwin);  
+            values);  
     xcb_change_property(connection,
             XCB_PROP_MODE_REPLACE,
             window,
@@ -342,6 +372,9 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     
     symbols = xcb_key_symbols_alloc(connection);
 #endif
+    windowWidth = width;
+    windowHeight = height;
+    
     SME::Core::addLoopUpdateHook(msgCheck);
     SME::Core::addCleanupHook(cleanup);
 }
