@@ -267,7 +267,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
         width = screenWidth;
         height = screenHeight;
     } else {
-        winstyle = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME
+        winstyle = (WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME)
                 | (resizable ? WS_THICKFRAME : 0)
                 | (maximised ? WS_MAXIMIZE : 0)
                 | (minimised ? WS_MINIMIZE : 0);
@@ -404,6 +404,7 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     
     SME::Core::addLoopUpdateHook(msgCheck);
     SME::Core::addCleanupHook(cleanup);
+    return true;
 }
 
 void SME::Window::cleanup() {
