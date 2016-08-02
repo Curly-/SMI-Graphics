@@ -191,25 +191,29 @@ void msgCheck() {
 }
 #elif defined __linux__
 
-#include <xcb/xcb_keysyms.h>
 #include <xcb/randr.h>
-#include <X11/keysym.h> //I blame XCB
-#include <string.h>  //I also blame netbeans for messing up my passive aggresive comments
+#include <string.h>
+#include <xkbcommon/xkbcommon-x11.h>
 
+//Window stuff
 xcb_connection_t* SME::Window::connection;
 xcb_window_t SME::Window::window;
 
-xcb_key_symbols_t *symbols;
-
+//Close event
 xcb_intern_atom_reply_t* closeCookie;
 
+//Resize event
 int resizeCheck = 0; //count from last resize update tick to prevent event spamming
+
+//Keyboard stuff
+struct xkb_context *ctx;
+struct xkb_keymap *keymap;
+struct xkb_state *state;
 
 void msgCheck() {
     xcb_generic_event_t *event;
-    SME::Events::Event smeEvent;
     resizeCheck++;
-    while (event = xcb_poll_for_event(SME::Window::connection)) {
+    while ((event = xcb_poll_for_event(SME::Window::connection))) {
         switch(event->response_type & ~0x80){
             case XCB_CONFIGURE_NOTIFY:
             {
@@ -221,27 +225,37 @@ void msgCheck() {
             }
             case XCB_CLIENT_MESSAGE:
                 if((*(xcb_client_message_event_t*)event).data.data32[0] == (*closeCookie).atom){
-                    smeEvent.type = SME::Events::SME_WINDOW;
-                    smeEvent.windowEvent.event = SME::Events::SME_WINDOW_CLOSE;
-                    SME::Events::createEvent(smeEvent);
+                    SME::Event::UI::WindowCloseEvent e;
+                    e.window = SME::Window::window;
+                    SME::Event::sendEvent(e);
                 }
                 break;
             case XCB_KEY_PRESS:
                 xcb_key_press_event_t *kp = (xcb_key_press_event_t*)event;
-                fprintf(stdout, "%u", kp->detail);
-                xcb_keysym_t sym = xcb_key_press_lookup_keysym(symbols, kp, 0);
-                fprintf(stdout, "\t%u\n", sym);
+                xkb_keycode_t keycode = kp->detail;
+                //xkb_keysym_t keysym = xkb_state_key_get_one_sym(state, keycode);
+                //char name[64];
+                //xkb_keysym_get_name(keysym, name, sizeof(name));
+                //fprintf(stdout, "%u (%s)\n", keysym, name);
+                SME::Event::UI::KeyDownEvent e;
+                e.window = SME::Window::window;
+                e.scancode = SME::Keyboard::OSScancodeTable[kp->detail];
+                e.keycode = SME::Keyboard::Key::KEY_UNKNOWN;
+                e.repeated = false;
+                
+                SME::Keyboard::KeyStates[e.scancode] = true;
+                SME::Event::sendEvent(e);
                 break;
         }
     }
     if(resizeCheck == 4){
         resizeCheck = 0;
         if(windowWidth != newWidth || windowHeight != newHeight){
-            smeEvent.type = SME::Events::SME_WINDOW;
-            smeEvent.windowEvent.event = SME::Events::SME_WINDOW_RESIZE;
-            smeEvent.windowEvent.width = newWidth;
-            smeEvent.windowEvent.height = newHeight;
-            SME::Events::createEvent(smeEvent);
+            SME::Event::UI::WindowResizeEvent e;
+            e.window = SME::Window::window;
+            e.width = newWidth;
+            e.height = newHeight;
+            SME::Event::sendEvent(e);
 
             windowWidth = newWidth;
             windowHeight = newHeight;
@@ -393,11 +407,41 @@ bool SME::Window::create(int width, int height, std::string title, int style) {
     
     xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, (*reply).atom, 4, 32, 1, &(*closeCookie).atom);
     
+    //keyboard layout stuff
+    
+    ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!ctx){
+        fprintf(stderr, "Couldn't create XKB context.\n");
+        return false;
+    }
+    
+    if(!xkb_x11_setup_xkb_extension(connection, XKB_X11_MIN_MAJOR_XKB_VERSION, XKB_X11_MIN_MINOR_XKB_VERSION, XKB_X11_SETUP_XKB_EXTENSION_NO_FLAGS, nullptr, nullptr, nullptr, nullptr)){
+        fprintf(stderr, "Couldn't setup XKB extension.\n");
+        return false;
+    }
+        
+    int32_t device_id = xkb_x11_get_core_keyboard_device_id(connection);
+    if (device_id == -1) {
+        fprintf(stderr, "Couldn't get a keyboard device id.\n");
+        return false;
+    }
+    
+    keymap = xkb_x11_keymap_new_from_device(ctx, connection, device_id,
+                                            XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (!keymap) {
+        fprintf(stderr, "Couldn't create keymap.\n");
+        return false;
+    }
+    
+    state = xkb_x11_state_new_from_device(keymap, connection, device_id);
+    if(!state){
+        fprintf(stderr, "Couldn't create an XKB state.\n");
+        return false;
+    }
+    
     //apply changes        
     
     xcb_flush(connection);
-    
-    symbols = xcb_key_symbols_alloc(connection);
 #endif
     windowWidth = width;
     windowHeight = height;
@@ -411,6 +455,9 @@ void SME::Window::cleanup() {
 #if defined _WIN32
     DestroyWindow(hwnd);
 #elif defined __linux__
+    xkb_state_unref(state);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(ctx);
     xcb_disconnect(connection);
 #endif
 }
